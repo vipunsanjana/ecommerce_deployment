@@ -14,15 +14,14 @@ const sendConfirmationEmail = async (userEmail, token) => {
       },
     });
 
-    // Construct the confirmation link
-    const confirmationLink = `http://localhost:3000/confirm-email?token=${token}`;
+
 
     // Send mail with defined transport object
     let info = await transporter.sendMail({
       from: '"VI Solutions" <visolution531@gmail.com>',
       to: userEmail,
       subject: "Registration Confirmation",
-      html: `<p>Thank you for registering with VI Solutions!</p><p>Please click <a href="${confirmationLink}">here</a> to confirm your email address.</p>`,
+      html: `<p>Thank you for registering with VI Solutions!</p>`,
     });
 
     // Log message URL for development
@@ -32,6 +31,7 @@ const sendConfirmationEmail = async (userEmail, token) => {
     console.error("Error sending email:", error);
   }
 };
+
 
 export const registerController = async (req, res) => {
   try {
@@ -67,7 +67,7 @@ export const registerController = async (req, res) => {
     await newUser.save();
 
     // Send confirmation email
-    await sendConfirmationEmail(email, token);
+    await sendConfirmationEmail(email);
 
     res.status(201).send({ message: "User registered successfully. Please check your email for confirmation." });
   } catch (error) {
