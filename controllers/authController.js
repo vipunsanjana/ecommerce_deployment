@@ -1,36 +1,28 @@
 import userModel from "../models/userModel.js";
-import orderModel from "../models/orderModel.js";
 import nodemailer from "nodemailer";
-import { comparePassword, hashPassword } from "./../helpers/authHelper.js";
+import { hashPassword, comparePassword } from "./../helpers/authHelper.js";
 import JWT from "jsonwebtoken";
 
-
-
-
-
-
-
-const sendConfirmationEmail = async (userEmail) => {
+const sendConfirmationEmail = async (userEmail, token) => {
   try {
-    // Create a test account with Ethereal Email (for development)
-    
-
     // Create a SMTP transporter object
     const transporter = nodemailer.createTransport({
-      service: 'gmail',// true for 465, false for other ports
+      service: 'gmail',
       auth: {
         user: "visolution531@gmail.com",
         pass: "gryq enkn rrdh kyuj",
       },
     });
 
-    // send mail with defined transport object
+    // Construct the confirmation link
+    const confirmationLink = `http://localhost:3000/confirm-email?token=${token}`;
+
+    // Send mail with defined transport object
     let info = await transporter.sendMail({
-      from: '"VI sOlutions" <visolution531@gmail.com>', // sender address
-      to: userEmail, // list of receivers
-      subject: "Registration Confirmation", // Subject line
-      text: "Welcome to our app!", // plain text body
-      html: "<b>Welcome to VI Solutions!</b>", // html body
+      from: '"VI Solutions" <visolution531@gmail.com>',
+      to: userEmail,
+      subject: "Registration Confirmation",
+      html: `<p>Thank you for registering with VI Solutions!</p><p>Please click <a href="${confirmationLink}">here</a> to confirm your email address.</p>`,
     });
 
     // Log message URL for development
@@ -41,68 +33,67 @@ const sendConfirmationEmail = async (userEmail) => {
   }
 };
 
-
-
-
 export const registerController = async (req, res) => {
   try {
     const { name, email, password, phone, address, answer } = req.body;
-    //validations
-    if (!name) {
-      return res.send({ error: "Name is Required" });
+
+    // Check if all required fields are provided
+    if (!name || !email || !password || !phone || !address || !answer) {
+      return res.status(400).send({ message: "All fields are required" });
     }
-    if (!email) {
-      return res.send({ message: "Email is Required" });
+
+    // Check if user already exists
+    const existingUser = await userModel.findOne({ email });
+    if (existingUser) {
+      return res.status(400).send({ message: "User already exists" });
     }
-    if (!password) {
-      return res.send({ message: "Password is Required" });
-    }
-    if (!phone) {
-      return res.send({ message: "Phone no is Required" });
-    }
-    if (!address) {
-      return res.send({ message: "Address is Required" });
-    }
-    if (!answer) {
-      return res.send({ message: "Answer is Required" });
-    }
-    //check user
-    const exisitingUser = await userModel.findOne({ email });
-    //exisiting user
-    if (exisitingUser) {
-      return res.status(200).send({
-        success: false,
-        message: "Already Register please login",
-      });
-    }
-    //register user
+
+    // Hash the password
     const hashedPassword = await hashPassword(password);
-    //save
-    const user = await new userModel({
+
+    // Create a token for email confirmation
+    const token = JWT.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1d' });
+
+    // Save the user to the database
+    const newUser = new userModel({
       name,
       email,
+      password: hashedPassword,
       phone,
       address,
-      password: hashedPassword,
       answer,
-    }).save();
-
-    await sendConfirmationEmail(email);
-
-    res.status(201).send({
-      success: true,
-      message: "User Register Successfully",
-      user,
     });
+
+    await newUser.save();
+
+    // Send confirmation email
+    await sendConfirmationEmail(email, token);
+
+    res.status(201).send({ message: "User registered successfully. Please check your email for confirmation." });
   } catch (error) {
-    console.log(error);
-    res.status(500).send({
-      success: false,
-      message: "Errro in Registeration",
-      error,
-    });
+    console.error("Error registering user:", error);
+    res.status(500).send({ message: "Internal server error" });
   }
 };
+
+export const confirmEmailController = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    // Verify token
+    const decoded = JWT.verify(token, process.env.JWT_SECRET);
+    const { email } = decoded;
+
+    // Update user's email confirmation status
+    await userModel.updateOne({ email }, { $set: { confirmed: true } });
+
+    res.redirect("http://localhost:3000/login?confirmed=true");
+  } catch (error) {
+    console.error("Error confirming email:", error);
+    res.redirect("http://localhost:3000/login?confirmed=false");
+  }
+};
+
 
 //POST LOGIN
 export const loginController = async (req, res) => {
